@@ -1,52 +1,106 @@
-name: Azure Static Web Apps CI/CD
+import type { Persona } from "@/types/persona";
+import { mockPersonas } from "@/mock/personas";
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    types: [opened, synchronize, reopened, closed]
-    branches:
-      - main
+/**
+ * REGLA DEFINITIVA:
+ * - Si NO hay API_URL → SIEMPRE usar mock
+ * - Aunque VITE_USE_MOCK diga otra cosa
+ */
+const API_URL = import.meta.env.VITE_API_URL;
+const USE_MOCK =
+  String(import.meta.env.VITE_USE_MOCK) === 'true' || !API_URL;
 
-jobs:
-  build_and_deploy_job:
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
-    runs-on: ubuntu-latest
+// (opcional, solo para debug temporal)
+// console.log('API_URL:', API_URL);
+// console.log('USE_MOCK:', USE_MOCK);
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-      - name: Use Node 20
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
+export const personasService = {
+  async getAll(): Promise<Persona[]> {
+    if (USE_MOCK) {
+      await delay(300);
+      return [...mockPersonas];
+    }
 
-      - name: Install dependencies
-        run: npm install
+    const res = await fetch(`${API_URL}/personas`);
+    return await res.json();
+  },
 
-      - name: Build project
-        run: npm run build
+  async getById(id: string): Promise<Persona | undefined> {
+    if (USE_MOCK) {
+      await delay(200);
+      return mockPersonas.find(p => p.id === id);
+    }
 
-      - name: Deploy to Azure Static Web Apps
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: "upload"
-          skip_app_build: true
-          app_location: "dist"
-          api_location: ""
-          output_location: "dist"
-          skip_deploy_on_missing_secrets: true   
+    const res = await fetch(`${API_URL}/personas/${id}`);
+    return await res.json();
+  },
 
-  close_pull_request_job:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
+  async create(data: Omit<Persona, 'id'>): Promise<Persona> {
+    if (USE_MOCK) {
+      await delay(300);
 
-    steps:
-      - name: Close Pull Request
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          action: "close"
+      const newPersona: Persona = {
+        ...data,
+        id: crypto.randomUUID(),
+      };
+
+      mockPersonas.push(newPersona);
+      return newPersona;
+    }
+
+    const res = await fetch(`${API_URL}/personas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    return await res.json();
+  },
+
+  async update(id: string, data: Partial<Persona>): Promise<Persona> {
+    if (USE_MOCK) {
+      await delay(300);
+
+      const index = mockPersonas.findIndex(p => p.id === id);
+      if (index === -1) throw new Error("Persona no encontrada");
+
+      const current = mockPersonas[index];
+      const updated: Persona = {
+        id: current.id,
+        nombre: data.nombre ?? current.nombre,
+        apellidoPaterno: data.apellidoPaterno ?? current.apellidoPaterno,
+        apellidoMaterno: data.apellidoMaterno ?? current.apellidoMaterno,
+        correo: data.correo ?? current.correo,
+        edad: data.edad ?? current.edad,
+        createdAt: data.createdAt ?? current.createdAt,
+      };
+
+      mockPersonas[index] = updated;
+      return updated;
+    }
+
+    const res = await fetch(`${API_URL}/personas/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    return await res.json();
+  },
+
+  async delete(id: string): Promise<void> {
+    if (USE_MOCK) {
+      await delay(200);
+
+      const index = mockPersonas.findIndex(p => p.id === id);
+      if (index !== -1) mockPersonas.splice(index, 1);
+      return;
+    }
+
+    await fetch(`${API_URL}/personas/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
