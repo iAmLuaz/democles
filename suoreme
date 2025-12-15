@@ -1,0 +1,22 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+- task: NodeTool@0
+  inputs:
+    versionSpec: '18.x'
+
+- script: |
+    npm install
+    npm run build
+  displayName: Build Vue app
+
+- task: AzureStaticWebApp@0
+  displayName: Deploy to Azure Static Web App
+  inputs:
+    app_location: "/"
+    output_location: "dist"
+    azure_static_web_apps_api_token: $(AZURE_STATIC_WEB_APPS_TOKEN)
