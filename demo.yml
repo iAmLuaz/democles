@@ -1,23 +1,47 @@
 module.exports = async function (context, req) {
-  const apiUrl = process.env.API_URL
-  const useMock = process.env.USE_MOCK
+  try {
+    context.log('HttpTrigger iniciado')
 
-  if (!apiUrl) {
+    const apiUrl = process.env.API_URL
+    const useMock = process.env.USE_MOCK
+
+    context.log('API_URL:', apiUrl)
+    context.log('USE_MOCK:', useMock)
+
+    if (!apiUrl) {
+      context.res = {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          ok: false,
+          error: 'API_URL no configurada',
+          env: {
+            API_URL: apiUrl ?? null,
+            USE_MOCK: useMock ?? null
+          }
+        }
+      }
+      return
+    }
+
+    context.res = {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        ok: true,
+        apiUrl,
+        useMock
+      }
+    }
+  } catch (err) {
     context.res = {
       status: 500,
-      body: { error: 'API_URL no configurada en variables de entorno' }
-    }
-    return
-  }
-
-  context.res = {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: {
-      apiUrl,
-      useMock: useMock === 'true'
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        ok: false,
+        error: err.message,
+        stack: err.stack
+      }
     }
   }
 }
