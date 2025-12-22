@@ -1,69 +1,23 @@
-<script setup lang="ts">
-import { ref } from 'vue'
+export default async function (context, req) {
+  const apiUrl = process.env.API_URL
+  const useMock = process.env.USE_MOCK
 
-const file = ref<File | null>(null)
-const uploading = ref(false)
-const message = ref('')
-
-// ⚠️ ESTE SAS VIENE DE BACKEND / CONFIG (PARA DEMO PUEDE SER FIJO)
-const SAS_URL = 'https://<storage-account>.blob.core.windows.net/<container>/demo-upload.xlsx?<sas-token>'
-
-const onFileChange = (e: Event) => {
-  const target = e.target as HTMLInputElement
-  file.value = target.files?.[0] || null
-}
-
-const uploadFile = async () => {
-  if (!file.value) {
-    message.value = 'Selecciona un archivo'
+  if (!apiUrl) {
+    context.res = {
+      status: 500,
+      body: { error: 'API_URL no configurada' }
+    }
     return
   }
 
-  uploading.value = true
-  message.value = ''
-
-  try {
-    const res = await fetch(SAS_URL, {
-      method: 'PUT',
-      body: file.value,
-      headers: {
-        'x-ms-blob-type': 'BlockBlob',
-        'Content-Type': file.value.type
-      }
-    })
-
-    if (!res.ok) throw new Error('Upload failed')
-
-    message.value = 'Archivo subido correctamente'
-  } catch (err) {
-    message.value = 'Error al subir archivo'
-  } finally {
-    uploading.value = false
+  context.res = {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: {
+      apiUrl,
+      useMock: useMock === 'true'
+    }
   }
 }
-</script>
-
-<template>
-  <div class="p-8 ml-64">
-    <h1 class="text-2xl font-bold mb-6">Carga de archivos a Blob Storage</h1>
-
-    <div class="bg-white rounded-xl shadow p-6 max-w-xl space-y-4">
-      <input
-        type="file"
-        accept=".xlsx,.xls,.csv"
-        @change="onFileChange"
-        class="block w-full text-sm text-slate-600"
-      />
-
-      <button
-        @click="uploadFile"
-        :disabled="uploading"
-        class="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50"
-      >
-        {{ uploading ? 'Subiendo...' : 'Subir archivo' }}
-      </button>
-
-      <p class="text-sm text-slate-600">{{ message }}</p>
-    </div>
-  </div>
-</template>
