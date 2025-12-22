@@ -1,106 +1,69 @@
-import type { Persona } from "@/types/persona";
-import { mockPersonas } from "@/mock/personas";
+<script setup lang="ts">
+import { ref } from 'vue'
 
-/**
- * REGLA DEFINITIVA:
- * - Si NO hay API_URL → SIEMPRE usar mock
- * - Aunque VITE_USE_MOCK diga otra cosa
- */
-const API_URL = import.meta.env.VITE_API_URL;
-const USE_MOCK =
-  String(import.meta.env.VITE_USE_MOCK) === 'true' || !API_URL;
+const file = ref<File | null>(null)
+const uploading = ref(false)
+const message = ref('')
 
-// (opcional, solo para debug temporal)
-// console.log('API_URL:', API_URL);
-// console.log('USE_MOCK:', USE_MOCK);
+// ⚠️ ESTE SAS VIENE DE BACKEND / CONFIG (PARA DEMO PUEDE SER FIJO)
+const SAS_URL = 'https://<storage-account>.blob.core.windows.net/<container>/demo-upload.xlsx?<sas-token>'
 
-const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+const onFileChange = (e: Event) => {
+  const target = e.target as HTMLInputElement
+  file.value = target.files?.[0] || null
+}
 
-export const personasService = {
-  async getAll(): Promise<Persona[]> {
-    if (USE_MOCK) {
-      await delay(300);
-      return [...mockPersonas];
-    }
+const uploadFile = async () => {
+  if (!file.value) {
+    message.value = 'Selecciona un archivo'
+    return
+  }
 
-    const res = await fetch(`${API_URL}/personas`);
-    return await res.json();
-  },
+  uploading.value = true
+  message.value = ''
 
-  async getById(id: string): Promise<Persona | undefined> {
-    if (USE_MOCK) {
-      await delay(200);
-      return mockPersonas.find(p => p.id === id);
-    }
-
-    const res = await fetch(`${API_URL}/personas/${id}`);
-    return await res.json();
-  },
-
-  async create(data: Omit<Persona, 'id'>): Promise<Persona> {
-    if (USE_MOCK) {
-      await delay(300);
-
-      const newPersona: Persona = {
-        ...data,
-        id: crypto.randomUUID(),
-      };
-
-      mockPersonas.push(newPersona);
-      return newPersona;
-    }
-
-    const res = await fetch(`${API_URL}/personas`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-
-    return await res.json();
-  },
-
-  async update(id: string, data: Partial<Persona>): Promise<Persona> {
-    if (USE_MOCK) {
-      await delay(300);
-
-      const index = mockPersonas.findIndex(p => p.id === id);
-      if (index === -1) throw new Error("Persona no encontrada");
-
-      const current = mockPersonas[index];
-      const updated: Persona = {
-        id: current.id,
-        nombre: data.nombre ?? current.nombre,
-        apellidoPaterno: data.apellidoPaterno ?? current.apellidoPaterno,
-        apellidoMaterno: data.apellidoMaterno ?? current.apellidoMaterno,
-        correo: data.correo ?? current.correo,
-        edad: data.edad ?? current.edad,
-        createdAt: data.createdAt ?? current.createdAt,
-      };
-
-      mockPersonas[index] = updated;
-      return updated;
-    }
-
-    const res = await fetch(`${API_URL}/personas/${id}`, {
+  try {
+    const res = await fetch(SAS_URL, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+      body: file.value,
+      headers: {
+        'x-ms-blob-type': 'BlockBlob',
+        'Content-Type': file.value.type
+      }
+    })
 
-    return await res.json();
-  },
+    if (!res.ok) throw new Error('Upload failed')
 
-  async delete(id: string): Promise<void> {
-    if (USE_MOCK) {
-      await delay(200);
+    message.value = 'Archivo subido correctamente'
+  } catch (err) {
+    message.value = 'Error al subir archivo'
+  } finally {
+    uploading.value = false
+  }
+}
+</script>
 
-      const index = mockPersonas.findIndex(p => p.id === id);
-      if (index !== -1) mockPersonas.splice(index, 1);
-      return;
-    }
+<template>
+  <div class="p-8 ml-64">
+    <h1 class="text-2xl font-bold mb-6">Carga de archivos a Blob Storage</h1>
 
-    await fetch(`${API_URL}/personas/${id}`, {
-      method: 'DELETE',
-    });
-  },
-};
+    <div class="bg-white rounded-xl shadow p-6 max-w-xl space-y-4">
+      <input
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        @change="onFileChange"
+        class="block w-full text-sm text-slate-600"
+      />
+
+      <button
+        @click="uploadFile"
+        :disabled="uploading"
+        class="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50"
+      >
+        {{ uploading ? 'Subiendo...' : 'Subir archivo' }}
+      </button>
+
+      <p class="text-sm text-slate-600">{{ message }}</p>
+    </div>
+  </div>
+</template>
