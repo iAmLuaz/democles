@@ -45,3 +45,53 @@ module.exports = async function (context, req) {
     }
   }
 }
+
+
+
+
+
+
+
+nuevo
+
+
+module.exports = async function (context, req) {
+  try {
+    const apiUrl = process.env.API_URL
+    if (!apiUrl) {
+      context.res = { status: 500, body: { ok: false, error: 'API_URL no configurada' } }
+      return
+    }
+
+    const path = context.req.url.split('/api/HttpTrigger1')[1]?.replace(/^\/+/, '') || ''
+    const url = `${apiUrl.replace(/\/+$/, '')}/${path}`
+
+    const method = (req.method || 'GET').toUpperCase()
+    const headers = { ...(req.headers || {}) }
+    delete headers.host
+
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: ['GET', 'HEAD'].includes(method) ? undefined : JSON.stringify(req.body ?? {})
+    })
+
+    const contentType = res.headers.get('content-type') || ''
+    const isJson = contentType.includes('application/json')
+    const data = isJson ? await res.json() : await res.text()
+
+    context.res = {
+      status: res.status,
+      headers: {
+        'Content-Type': contentType || (isJson ? 'application/json' : 'text/plain'),
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS'
+      },
+      body: data
+    }
+  } catch (err) {
+    context.res = { status: 500, body: { ok: false, error: err.message, stack: err.stack } }
+  }
+}
+
