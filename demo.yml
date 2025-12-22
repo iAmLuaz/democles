@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-
-definePageMeta({
-  layout: 'dashboard',
-})
+import { getSasUrl } from '@/services/uploadService'
 
 const file = ref<File | null>(null)
 const uploading = ref(false)
@@ -19,7 +16,6 @@ function onFileChange(e: Event) {
   success.value = false
 }
 
-// Stub: aquí luego entra SAS
 async function upload() {
   if (!file.value) {
     error.value = 'Selecciona un archivo.'
@@ -30,13 +26,15 @@ async function upload() {
   error.value = null
 
   try {
-    // aquí luego:
-    // 1) GET /api/sas
-    // 2) PUT a blob con SAS
-    await new Promise(res => setTimeout(res, 800)) // fake delay
+    const selectedFile = file.value
+    const { uploadUrl } = await getSasUrl(selectedFile.name)
+
+    // Aquí SOLO probamos SAS (aún no subimos)
+    console.log('SAS OK:', uploadUrl)
+
     success.value = true
   } catch (e) {
-    error.value = 'Error al subir el archivo.'
+    error.value = 'Error obteniendo SAS.'
   } finally {
     uploading.value = false
   }
@@ -65,7 +63,7 @@ async function upload() {
         :disabled="uploading"
         class="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50"
       >
-        {{ uploading ? 'Subiendo…' : 'Subir archivo' }}
+        {{ uploading ? 'Obteniendo permiso…' : 'Solicitar permiso (SAS)' }}
       </button>
 
       <p v-if="error" class="text-sm text-red-600">
@@ -73,7 +71,7 @@ async function upload() {
       </p>
 
       <p v-if="success" class="text-sm text-green-600">
-        Archivo subido correctamente.
+        SAS obtenido correctamente. Revisa la consola.
       </p>
     </div>
   </div>
