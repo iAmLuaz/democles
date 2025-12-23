@@ -1,89 +1,39 @@
 module.exports = async function (context, req) {
   try {
     const apiUrl = process.env.API_URL
-    const functionsUrl = process.env.FUNCTIONS_URL
-
-    if (!apiUrl || !functionsUrl) {
-      context.res = {
-        status: 500,
-        body: { ok: false, error: 'API_URL o FUNCTIONS_URL no configurada' }
-      }
+    if (!apiUrl) {
+      context.res = { status: 500, body: { ok: false, error: 'API_URL no configurada' } }
       return
     }
 
     const path = (req.query.path || '').toString().replace(/^\/+/, '')
-    if (!path) {
-      context.res = { status: 400, body: { ok: false, error: 'path requerido' } }
-      return
-    }
-
-    // 👉 Decidir destino
-    const isFunctionCall = path === 'sas'
-    const baseUrl = isFunctionCall ? functionsUrl : apiUrl
-
-    // 👉 Construir URL final
-    const query = { ...req.query }
-    delete query.path
-
-    const qs = new URLSearchParams(query).toString()
-    const url = `${baseUrl}/${path}${qs ? `?${qs}` : ''}`
-
-    context.log('[proxy] →', url)
+    const url = `${apiUrl.replace(/\/+$/, '')}/${path}`
 
     const method = (req.method || 'GET').toUpperCase()
     const headers = { ...(req.headers || {}) }
     delete headers.host
-    delete headers.origin
 
     const res = await fetch(url, {
       method,
       headers,
-      body: ['GET', 'HEAD'].includes(method)
-        ? undefined
-        : JSON.stringify(req.body ?? {})
+      body: ['GET', 'HEAD'].includes(method) ? undefined : JSON.stringify(req.body ?? {})
     })
 
     const contentType = res.headers.get('content-type') || ''
-    const data = contentType.includes('application/json')
-      ? await res.json()
-      : await res.text()
+    const isJson = contentType.includes('application/json')
+    const data = isJson ? await res.json() : await res.text()
 
     context.res = {
       status: res.status,
       headers: {
-        'Content-Type': contentType,
-        'Access-Control-Allow-Origin': '*'
+        'Content-Type': contentType || (isJson ? 'application/json' : 'text/plain'),
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS'
       },
       body: data
     }
   } catch (err) {
-    context.log.error(err)
-    context.res = {
-      status: 500,
-      body: { ok: false, error: err.message }
-    }
+    context.res = { status: 500, body: { ok: false, error: err.message, stack: err.stack } }
   }
-}
-
-
-
-
-export async function getSasUrl(filename: string): Promise<{ uploadUrl: string }> {
-  console.log('[uploadService] filename:', filename)
-
-  const url = `/api/proxy?path=sas&filename=${encodeURIComponent(filename)}`
-  console.log('[uploadService] fetch:', url)
-
-  const res = await fetch(url)
-
-  console.log('[uploadService] status:', res.status)
-
-  const text = await res.text()
-  console.log('[uploadService] raw:', text)
-
-  if (!res.ok) {
-    throw new Error('No se obtuvo SAS')
-  }
-
-  return JSON.parse(text)
 }
