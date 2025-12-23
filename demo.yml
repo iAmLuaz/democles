@@ -1,48 +1,89 @@
-export async function getSasUrl(filename: string) {
-  console.log('[uploadService] filename:', filename)
+module.exports = async function (context, req) {
+  try {
+    const apiUrl = process.env.API_URL
+    const functionsUrl = process.env.FUNCTIONS_URL
 
-  const url = `/api/httpTrigger2?filename=${encodeURIComponent(filename)}`
-  console.log('[uploadService] fetch URL:', url)
+    if (!apiUrl || !functionsUrl) {
+      context.res = {
+        status: 500,
+        body: { ok: false, error: 'API_URL o FUNCTIONS_URL no configurada' }
+      }
+      return
+    }
 
-  const res = await fetch(url)
-  console.log('[uploadService] response status:', res.status)
+    const path = (req.query.path || '').toString().replace(/^\/+/, '')
+    if (!path) {
+      context.res = { status: 400, body: { ok: false, error: 'path requerido' } }
+      return
+    }
 
-  const text = await res.text()
-  console.log('[uploadService] raw response:', text)
+    // 👉 Decidir destino
+    const isFunctionCall = path === 'sas'
+    const baseUrl = isFunctionCall ? functionsUrl : apiUrl
 
-  if (!res.ok) {
-    throw new Error('No se obtuvo el SAS')
+    // 👉 Construir URL final
+    const query = { ...req.query }
+    delete query.path
+
+    const qs = new URLSearchParams(query).toString()
+    const url = `${baseUrl}/${path}${qs ? `?${qs}` : ''}`
+
+    context.log('[proxy] →', url)
+
+    const method = (req.method || 'GET').toUpperCase()
+    const headers = { ...(req.headers || {}) }
+    delete headers.host
+    delete headers.origin
+
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: ['GET', 'HEAD'].includes(method)
+        ? undefined
+        : JSON.stringify(req.body ?? {})
+    })
+
+    const contentType = res.headers.get('content-type') || ''
+    const data = contentType.includes('application/json')
+      ? await res.json()
+      : await res.text()
+
+    context.res = {
+      status: res.status,
+      headers: {
+        'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*'
+      },
+      body: data
+    }
+  } catch (err) {
+    context.log.error(err)
+    context.res = {
+      status: 500,
+      body: { ok: false, error: err.message }
+    }
   }
-
-  return JSON.parse(text) as { uploadUrl: string }
 }
 
 
 
 
-async function upload() {
-  if (!file.value) {
-    error.value = 'Selecciona un archivo.'
-    return
+export async function getSasUrl(filename: string): Promise<{ uploadUrl: string }> {
+  console.log('[uploadService] filename:', filename)
+
+  const url = `/api/proxy?path=sas&filename=${encodeURIComponent(filename)}`
+  console.log('[uploadService] fetch:', url)
+
+  const res = await fetch(url)
+
+  console.log('[uploadService] status:', res.status)
+
+  const text = await res.text()
+  console.log('[uploadService] raw:', text)
+
+  if (!res.ok) {
+    throw new Error('No se obtuvo SAS')
   }
 
-  uploading.value = true
-  error.value = null
-
-  try {
-    const selectedFile = file.value
-    console.log('[Upload] file name:', selectedFile.name)
-
-    const result = await getSasUrl(selectedFile.name)
-    console.log('[Upload] SAS result:', result)
-
-    console.log('[Upload] uploadUrl:', result.uploadUrl)
-
-    success.value = true
-  } catch (e) {
-    console.error('[Upload] ERROR:', e)
-    error.value = 'Error obteniendo SAS.'
-  } finally {
-    uploading.value = false
-  }
+  return JSON.parse(text)
 }
