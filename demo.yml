@@ -5,34 +5,62 @@ const {
 } = require('@azure/storage-blob')
 
 module.exports = async function (context, req) {
-  const filename = req.query.filename
+  try {
+    const filename = (req.query.filename || '').toString()
+    if (!filename) {
+      context.res = { status: 400, body: { ok: false, error: 'filename requerido' } }
+      return
+    }
 
-  if (!filename) {
-    context.res = { status: 400, body: 'filename required' }
-    return
-  }
+    const accountName = process.env.STORAGE_ACCOUNT_NAME
+    const accountKey = process.env.STORAGE_ACCOUNT_KEY
 
-  const accountName = process.env.STORAGE_ACCOUNT_NAME
-  const accountKey = process.env.STORAGE_ACCOUNT_KEY
+    if (!accountName || !accountKey) {
+      context.res = {
+        status: 500,
+        body: { ok: false, error: 'Storage credentials no configuradas' }
+      }
+      return
+    }
 
-  const credential = new StorageSharedKeyCredential(
-    accountName,
-    accountKey
-  )
+    const credential = new StorageSharedKeyCredential(
+      accountName,
+      accountKey
+    )
 
-  const expiresOn = new Date(Date.now() + 5 * 60 * 1000)
+    const expiresOn = new Date(Date.now() + 5 * 60 * 1000) // 5 min
 
-  const sas = generateBlobSASQueryParameters({
-    containerName: 'uploads',
-    blobName: filename,
-    permissions: BlobSASPermissions.parse('cw'),
-    expiresOn
-  }, credential).toString()
+    const sas = generateBlobSASQueryParameters({
+      containerName: 'uploads',
+      blobName: filename,
+      permissions: BlobSASPermissions.parse('cw'),
+      expiresOn
+    }, credential).toString()
 
-  context.res = {
-    status: 200,
-    body: {
-      uploadUrl: `https://${accountName}.blob.core.windows.net/uploads/${filename}?${sas}`
+    const uploadUrl =
+      `https://${accountName}.blob.core.windows.net/uploads/${filename}?${sas}`
+
+    context.res = {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': 'GET,OPTIONS'
+      },
+      body: {
+        ok: true,
+        uploadUrl
+      }
+    }
+  } catch (err) {
+    context.res = {
+      status: 500,
+      body: {
+        ok: false,
+        error: err.message,
+        stack: err.stack
+      }
     }
   }
 }
