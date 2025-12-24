@@ -1,33 +1,89 @@
-module.exports = async function (context, req) {
-  const API_URL = process.env.API_URL
-  const method = req.method.toUpperCase()
-  const id = req.query.id
+import type { Persona } from "@/types/persona"
+import { mockPersonas } from "@/mock/personas"
 
-  if (!API_URL) {
-    context.res = {
-      status: 500,
-      body: { error: 'API_URL no configurado' }
+const USE_MOCK = false
+
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms))
+
+// 👉 URL del proxy (Function App standalone)
+const PROXY_URL =
+  import.meta.env.VITE_PERSONAS_PROXY_URL ||
+  'http://localhost:7071/api/personas-proxy' // fallback local
+
+export const personasService = {
+  async getAll(): Promise<Persona[]> {
+    if (USE_MOCK) {
+      await delay(300)
+      return [...mockPersonas]
     }
-    return
-  }
 
-  let url = `${API_URL}/consultar/clientes`
+    const res = await fetch(PROXY_URL)
+    if (!res.ok) throw new Error('Error al obtener personas')
+    return await res.json()
+  },
 
-  if (method === 'GET' && id) {
-    url = `${API_URL}/consultar/cliente/${id}`
-  }
+  async getById(id: string): Promise<Persona | undefined> {
+    if (USE_MOCK) {
+      await delay(200)
+      return mockPersonas.find(p => p.id === id)
+    }
 
-  context.log('Calling backend:', url)
+    const res = await fetch(`${PROXY_URL}?id=${id}`)
+    if (!res.ok) throw new Error('Error al obtener persona')
+    return await res.json()
+  },
 
-  const res = await fetch(url)
-  const data = await res.text()
+  async create(data: Omit<Persona, 'id'>): Promise<Persona> {
+    if (USE_MOCK) {
+      await delay(300)
+      const newPersona: Persona = { ...data, id: crypto.randomUUID() }
+      mockPersonas.push(newPersona)
+      return newPersona
+    }
 
-  context.res = {
-    status: res.status,
-    headers: {
-      'Content-Type': res.headers.get('content-type') ?? 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    },
-    body: data
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+
+    if (!res.ok) throw new Error('Error al crear persona')
+    return await res.json()
+  },
+
+  async update(id: string, data: Partial<Persona>): Promise<Persona> {
+    if (USE_MOCK) {
+      await delay(300)
+      const index = mockPersonas.findIndex(p => p.id === id)
+      if (index === -1) throw new Error('Persona no encontrada')
+
+      const updated: Persona = { ...mockPersonas[index], ...data }
+      mockPersonas[index] = updated
+      return updated
+    }
+
+    const res = await fetch(`${PROXY_URL}?id=${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+
+    if (!res.ok) throw new Error('Error al actualizar persona')
+    return await res.json()
+  },
+
+  async delete(id: string): Promise<void> {
+    if (USE_MOCK) {
+      await delay(200)
+      const index = mockPersonas.findIndex(p => p.id === id)
+      if (index !== -1) mockPersonas.splice(index, 1)
+      return
+    }
+
+    const res = await fetch(`${PROXY_URL}?id=${id}`, {
+      method: 'DELETE'
+    })
+
+    if (!res.ok) throw new Error('Error al eliminar persona')
   }
 }
