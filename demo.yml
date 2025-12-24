@@ -1,63 +1,71 @@
-module.exports = async function (context, req) {
-  console.log('🔥 FUNCTION HIT')
-  console.log('➡️ METHOD:', req.method)
-  console.log('➡️ URL:', req.url)
-  console.log('➡️ BODY:', req.body)
-  console.log('➡️ BINDING ID:', context.bindingData?.id)
+const API_BASE = '/api/personas'
 
-  const API_URL = process.env.API_URL
-  console.log('➡️ API_URL:', API_URL)
+export const personasService = {
+  async getAll(): Promise<Persona[]> {
+    if (USE_MOCK) {
+      await delay(300)
+      return [...mockPersonas]
+    }
 
-  const method = req.method.toUpperCase()
-  const id = context.bindingData.id
+    const res = await fetch(API_BASE)
+    return await res.json()
+  },
 
-  let url = null
+  async getById(id: string): Promise<Persona | undefined> {
+    if (USE_MOCK) {
+      await delay(200)
+      return mockPersonas.find(p => p.id === id)
+    }
 
-  if (method === 'GET' && !id) {
-    url = `${API_URL}/consultar/clientes`
-  }
+    const res = await fetch(`${API_BASE}/${id}`)
+    return await res.json()
+  },
 
-  if (method === 'GET' && id) {
-    url = `${API_URL}/consultar/cliente/${id}`
-  }
+  async create(data: Omit<Persona, 'id'>): Promise<Persona> {
+    if (USE_MOCK) {
+      await delay(300)
+      const newPersona: Persona = { ...data, id: crypto.randomUUID() }
+      mockPersonas.push(newPersona)
+      return newPersona
+    }
 
-  if (method === 'POST') {
-    url = `${API_URL}/registrar/cliente`
-  }
+    const res = await fetch(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
 
-  if (method === 'PUT' && id) {
-    url = `${API_URL}/actualizar/cliente/${id}`
-  }
+    return await res.json()
+  },
 
-  if (method === 'DELETE' && id) {
-    url = `${API_URL}/eliminar/cliente/${id}`
-  }
+  async update(id: string, data: Partial<Persona>): Promise<Persona> {
+    if (USE_MOCK) {
+      await delay(300)
+      const index = mockPersonas.findIndex(p => p.id === id)
+      if (index === -1) throw new Error('Persona no encontrada')
 
-  console.log('➡️ TARGET URL:', url)
+      const updated: Persona = { ...mockPersonas[index], ...data } as Persona
+      mockPersonas[index] = updated
+      return updated
+    }
 
-  if (!url) {
-    context.res = { status: 404, body: 'Ruta no soportada' }
-    return
-  }
+    const res = await fetch(`${API_BASE}/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
 
-  const res = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: ['GET', 'DELETE'].includes(method)
-      ? undefined
-      : JSON.stringify(req.body)
-  })
+    return await res.json()
+  },
 
-  console.log('⬅️ BACKEND STATUS:', res.status)
+  async delete(id: string): Promise<void> {
+    if (USE_MOCK) {
+      await delay(200)
+      const index = mockPersonas.findIndex(p => p.id === id)
+      if (index !== -1) mockPersonas.splice(index, 1)
+      return
+    }
 
-  const data = await res.text()
-
-  context.res = {
-    status: res.status,
-    headers: {
-      'Content-Type': res.headers.get('content-type') ?? 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    },
-    body: data
+    await fetch(`${API_BASE}/${id}`, { method: 'DELETE' })
   }
 }
