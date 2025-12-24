@@ -1,39 +1,53 @@
-module.exports = async function (context, req) {
+async getAll(): Promise<Persona[]> {
+  const { apiUrl, useMock } = await getConfig()
+
+  // 1. Modo mock o backend inexistente
+  if (useMock || !apiUrl) {
+    await delay(300)
+    return [...mockPersonas]
+  }
+
+  const url = `${apiUrl}/consultar/clientes`
+
+  let res: Response
+
   try {
-    const apiUrl = process.env.API_URL
-    if (!apiUrl) {
-      context.res = { status: 500, body: { ok: false, error: 'API_URL no configurada' } }
-      return
+    res = await fetch(url)
+  } catch (e) {
+    // Fallo de red, DNS, CORS, proxy muerto, etc.
+    console.error('[API][getAll] Network error:', e)
+    throw new Error('No se pudo conectar con el backend')
+  }
+
+  // 2. Status HTTP inválido
+  if (!res.ok) {
+    const text = await res.text()
+    console.error('[API][getAll] HTTP error', res.status, text)
+    throw new Error(`Error ${res.status} al consultar personas`)
+  }
+
+  // 3. Validar que realmente sea JSON
+  const contentType = res.headers.get('content-type')
+
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await res.text()
+    console.error('[API][getAll] Invalid content-type:', contentType, text)
+    throw new Error('Respuesta inválida del servidor (no es JSON)')
+  }
+
+  // 4. Parse seguro
+  try {
+    const data = await res.json()
+
+    // 5. Validación mínima del contrato
+    if (!Array.isArray(data)) {
+      console.error('[API][getAll] Payload inesperado:', data)
+      throw new Error('Formato de respuesta inválido')
     }
 
-    const path = (req.query.path || '').toString().replace(/^\/+/, '')
-    const url = `${apiUrl.replace(/\/+$/, '')}/${path}`
-
-    const method = (req.method || 'GET').toUpperCase()
-    const headers = { ...(req.headers || {}) }
-    delete headers.host
-
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: ['GET', 'HEAD'].includes(method) ? undefined : JSON.stringify(req.body ?? {})
-    })
-
-    const contentType = res.headers.get('content-type') || ''
-    const isJson = contentType.includes('application/json')
-    const data = isJson ? await res.json() : await res.text()
-
-    context.res = {
-      status: res.status,
-      headers: {
-        'Content-Type': contentType || (isJson ? 'application/json' : 'text/plain'),
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': '*',
-        'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS'
-      },
-      body: data
-    }
-  } catch (err) {
-    context.res = { status: 500, body: { ok: false, error: err.message, stack: err.stack } }
+    return data as Persona[]
+  } catch (e) {
+    console.error('[API][getAll] JSON parse error:', e)
+    throw new Error('Error al procesar la respuesta del servidor')
   }
 }
