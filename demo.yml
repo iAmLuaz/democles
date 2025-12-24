@@ -1,39 +1,16 @@
-export async function getRuntimeConfig(): Promise<RuntimeConfig> {
-  if (cachedConfig) return cachedConfig
+module.exports = async function (context, req) {
+  const apiUrl = process.env.API_URL
 
-  let res: Response
-
-  try {
-    res = await fetch('/api/config')
-  } catch (e) {
-    console.error('[CONFIG] Network error', e)
-    cachedConfig = { apiUrl: null, useMock: true }
-    return cachedConfig
-  }
-
-  console.log('[CONFIG] status:', res.status)
-  console.log('[CONFIG] headers:', [...res.headers.entries()])
-
-  const text = await res.text()
-  console.log('[CONFIG] raw response:', text)
-
-  if (!res.ok) {
-    cachedConfig = { apiUrl: null, useMock: true }
-    return cachedConfig
-  }
-
-  try {
-    const data = JSON.parse(text)
-
-    cachedConfig = {
-      apiUrl: data.API_URL ?? null,
-      useMock: Boolean(data.USE_MOCK),
+  context.res = {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    },
+    body: {
+      ok: true,
+      apiUrl,
+      note: 'Esta es la URL EXACTA traída desde Key Vault / Application Settings'
     }
-
-    return cachedConfig
-  } catch (e) {
-    console.error('[CONFIG] JSON parse failed')
-    cachedConfig = { apiUrl: null, useMock: true }
-    return cachedConfig
   }
 }
