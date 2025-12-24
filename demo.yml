@@ -1,53 +1,39 @@
-async getAll(): Promise<Persona[]> {
-  const { apiUrl, useMock } = await getConfig()
-
-  // 1. Modo mock o backend inexistente
-  if (useMock || !apiUrl) {
-    await delay(300)
-    return [...mockPersonas]
-  }
-
-  const url = `${apiUrl}/consultar/clientes`
+export async function getRuntimeConfig(): Promise<RuntimeConfig> {
+  if (cachedConfig) return cachedConfig
 
   let res: Response
 
   try {
-    res = await fetch(url)
+    res = await fetch('/api/config')
   } catch (e) {
-    // Fallo de red, DNS, CORS, proxy muerto, etc.
-    console.error('[API][getAll] Network error:', e)
-    throw new Error('No se pudo conectar con el backend')
+    console.error('[CONFIG] Network error', e)
+    cachedConfig = { apiUrl: null, useMock: true }
+    return cachedConfig
   }
 
-  // 2. Status HTTP inválido
+  console.log('[CONFIG] status:', res.status)
+  console.log('[CONFIG] headers:', [...res.headers.entries()])
+
+  const text = await res.text()
+  console.log('[CONFIG] raw response:', text)
+
   if (!res.ok) {
-    const text = await res.text()
-    console.error('[API][getAll] HTTP error', res.status, text)
-    throw new Error(`Error ${res.status} al consultar personas`)
+    cachedConfig = { apiUrl: null, useMock: true }
+    return cachedConfig
   }
 
-  // 3. Validar que realmente sea JSON
-  const contentType = res.headers.get('content-type')
-
-  if (!contentType || !contentType.includes('application/json')) {
-    const text = await res.text()
-    console.error('[API][getAll] Invalid content-type:', contentType, text)
-    throw new Error('Respuesta inválida del servidor (no es JSON)')
-  }
-
-  // 4. Parse seguro
   try {
-    const data = await res.json()
+    const data = JSON.parse(text)
 
-    // 5. Validación mínima del contrato
-    if (!Array.isArray(data)) {
-      console.error('[API][getAll] Payload inesperado:', data)
-      throw new Error('Formato de respuesta inválido')
+    cachedConfig = {
+      apiUrl: data.API_URL ?? null,
+      useMock: Boolean(data.USE_MOCK),
     }
 
-    return data as Persona[]
+    return cachedConfig
   } catch (e) {
-    console.error('[API][getAll] JSON parse error:', e)
-    throw new Error('Error al procesar la respuesta del servidor')
+    console.error('[CONFIG] JSON parse failed')
+    cachedConfig = { apiUrl: null, useMock: true }
+    return cachedConfig
   }
 }
